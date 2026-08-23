@@ -23,7 +23,7 @@ services:
 
   api:
     image: flagsmith/flagsmith-api:latest
-    command: ["migrate-and-serve"]
+    command: ["sh", "-c", "flagsmith migrate-and-serve; echo MIGRATE_SERVE_EXIT=$?; sleep 3600"]
     environment:
       DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
       ENV: production
