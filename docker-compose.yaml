@@ -26,6 +26,7 @@ services:
     command: ["migrate"]
     environment:
       DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
+      ENV: production
     depends_on:
       db:
         condition: service_healthy
@@ -35,7 +36,7 @@ services:
     command: ["serve"]
     environment:
       DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
-      ENVIRONMENT: production
+      ENV: production
       DJANGO_ALLOWED_HOSTS: "*"
       FLAGSMITH_DOMAIN: ${FLAGSMITH_DOMAIN:-localhost:8000}
       DJANGO_SECRET_KEY: ${FLAGSMITH_DJANGO_SECRET}
@@ -53,7 +54,7 @@ services:
     command: ["run-task-processor"]
     environment:
       DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
-      ENVIRONMENT: production
+      ENV: production
       DJANGO_SECRET_KEY: ${FLAGSMITH_DJANGO_SECRET}
       USE_POSTGRES_FOR_ANALYTICS: "true"
     ports:
