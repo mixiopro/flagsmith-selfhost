@@ -1,0 +1,75 @@
+# Self-hosted Flagsmith (Spec 039) — deployed via Coolify dockercompose build pack.
+# Secrets (FLAGSMITH_DB_PASSWORD, FLAGSMITH_DJANGO_SECRET) and FLAGSMITH_DOMAIN /
+# FLAGSMITH_API_URL are injected as Coolify application environment variables, not
+# stored in this file. Images use public Docker Hub (flagsmith/*), NOT the gated
+# docker.flagsmith.com registry.
+
+name: flagsmith
+
+services:
+  db:
+    image: postgres:15.5-alpine
+    environment:
+      POSTGRES_PASSWORD: ${FLAGSMITH_DB_PASSWORD}
+      POSTGRES_DB: flagsmith
+    volumes:
+      - flagsmith_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d flagsmith -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  migrate:
+    image: flagsmith/flagsmith-api:latest
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: flagsmith/flagsmith-api:latest
+    command: ["serve"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
+      ENVIRONMENT: production
+      DJANGO_ALLOWED_HOSTS: "*"
+      FLAGSMITH_DOMAIN: ${FLAGSMITH_DOMAIN:-localhost:8000}
+      DJANGO_SECRET_KEY: ${FLAGSMITH_DJANGO_SECRET}
+      USE_POSTGRES_FOR_ANALYTICS: "true"
+      TASK_RUN_METHOD: TASK_PROCESSOR
+      PROMETHEUS_ENABLED: "true"
+    ports:
+      - 8000:8000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  task-processor:
+    image: flagsmith/flagsmith-api:latest
+    command: ["run-task-processor"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
+      ENVIRONMENT: production
+      DJANGO_SECRET_KEY: ${FLAGSMITH_DJANGO_SECRET}
+      USE_POSTGRES_FOR_ANALYTICS: "true"
+    ports:
+      - 8001:8000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    image: flagsmith/flagsmith-frontend:latest
+    environment:
+      FLAGSMITH_API_URL: ${FLAGSMITH_API_URL:-http://api:8000/api/v1/}
+    ports:
+      - 8080:8080
+    depends_on:
+      - api
+
+volumes:
+  flagsmith_pgdata:
