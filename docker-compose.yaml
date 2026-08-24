@@ -48,7 +48,9 @@ services:
       - traefik.enable=true
       - traefik.http.routers.flagsmithapi-http.rule=Host(`api.flagsmith.mixio.pro`)
       - traefik.http.routers.flagsmithapi-http.entryPoints=http
-      - traefik.http.routers.flagsmithapi-http.middlewares=redirect-to-https
+      - traefik.http.routers.flagsmithapi-http.middlewares=flagsmith-to-https
+      - traefik.http.middlewares.flagsmith-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.flagsmith-to-https.redirectscheme.permanent=true
       - traefik.http.routers.flagsmithapi-https.rule=Host(`api.flagsmith.mixio.pro`)
       - traefik.http.routers.flagsmithapi-https.entryPoints=https
       - traefik.http.routers.flagsmithapi-https.tls=true
@@ -68,7 +70,9 @@ services:
       - traefik.enable=true
       - traefik.http.routers.flagsmithui-http.rule=Host(`flagsmith.mixio.pro`)
       - traefik.http.routers.flagsmithui-http.entryPoints=http
-      - traefik.http.routers.flagsmithui-http.middlewares=redirect-to-https
+      - traefik.http.routers.flagsmithui-http.middlewares=flagsmith-to-https
+      - traefik.http.middlewares.flagsmith-to-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.flagsmith-to-https.redirectscheme.permanent=true
       - traefik.http.routers.flagsmithui-https.rule=Host(`flagsmith.mixio.pro`)
       - traefik.http.routers.flagsmithui-https.entryPoints=https
       - traefik.http.routers.flagsmithui-https.tls=true
