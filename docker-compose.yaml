@@ -1,8 +1,10 @@
 # Self-hosted Flagsmith (Spec 039) — deployed via Coolify dockercompose build pack.
 #
-# No host ports are published: Main is a shared host and 8000/8080/8081 collide with
-# other resources. Services are only `expose`d on the internal Compose network, and
-# Coolify's proxy routes traffic using the SERVICE_FQDN_* magic variables below.
+# No host ports are published: Main is a shared host where 8000/8080/8081 are already
+# allocated by other resources. Services are only `expose`d on the internal Compose
+# network and Coolify's proxy routes them using the SERVICE_FQDN_* magic variables.
+# Each FQDN variable is declared bare AND referenced, because Coolify only generates a
+# value (and therefore a proxy route) for magic variables that are actually used.
 #
 # Secrets are generated and persisted by Coolify from the SERVICE_PASSWORD_* /
 # SERVICE_HEX_64_* magic variables, so they are never stored in this file.
@@ -14,8 +16,8 @@ services:
   db:
     image: postgres:15.5-alpine
     environment:
-      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_FLAGSMITHDB}
-      POSTGRES_DB: flagsmith
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_FLAGSMITHDB}
+      - POSTGRES_DB=flagsmith
     volumes:
       - flagsmith_pgdata_v2:/var/lib/postgresql/data
     healthcheck:
@@ -28,16 +30,16 @@ services:
     image: flagsmith/flagsmith-api:latest
     command: ["migrate-and-serve"]
     environment:
-      # Coolify generates this FQDN and proxies it to the api container on port 8000.
-      SERVICE_FQDN_API_8000: ""
-      DATABASE_URL: postgresql://postgres:${SERVICE_PASSWORD_FLAGSMITHDB}@db:5432/flagsmith
-      ENV: production
-      DJANGO_ALLOWED_HOSTS: "*"
-      DJANGO_SECRET_KEY: ${SERVICE_HEX_64_FLAGSMITHDJANGO}
-      FLAGSMITH_DOMAIN: ${SERVICE_FQDN_API_8000}
-      USE_POSTGRES_FOR_ANALYTICS: "true"
-      TASK_RUN_METHOD: SYNCHRONOUSLY
-      PROMETHEUS_ENABLED: "false"
+      # Coolify proxies this generated FQDN to the api container on port 8000.
+      - SERVICE_FQDN_API_8000
+      - FLAGSMITH_DOMAIN=${SERVICE_FQDN_API_8000}
+      - DATABASE_URL=postgresql://postgres:${SERVICE_PASSWORD_FLAGSMITHDB}@db:5432/flagsmith
+      - ENV=production
+      - DJANGO_ALLOWED_HOSTS=*
+      - DJANGO_SECRET_KEY=${SERVICE_HEX_64_FLAGSMITHDJANGO}
+      - USE_POSTGRES_FOR_ANALYTICS=true
+      - TASK_RUN_METHOD=SYNCHRONOUSLY
+      - PROMETHEUS_ENABLED=false
     expose:
       - "8000"
     depends_on:
@@ -46,15 +48,16 @@ services:
   frontend:
     image: flagsmith/flagsmith-frontend:latest
     environment:
-      # Coolify generates this FQDN and proxies it to the frontend container on port 8080.
-      SERVICE_FQDN_FRONTEND_8080: ""
-      FLAGSMITH_API_URL: ${SERVICE_URL_API_8000}/api/v1/
+      # Coolify proxies this generated FQDN to the frontend container on port 8080.
+      - SERVICE_FQDN_FRONTEND_8080
+      - FLAGSMITH_UI_DOMAIN=${SERVICE_FQDN_FRONTEND_8080}
+      - FLAGSMITH_API_URL=${SERVICE_URL_API_8000}/api/v1/
     expose:
       - "8080"
     depends_on:
       - api
 volumes:
-  # v2: the original volume was initialized with a pre-magic-variable password, which
-  # PostgreSQL keeps for the life of the data directory. A fresh volume lets initdb use
-  # the Coolify-generated SERVICE_PASSWORD_FLAGSMITHDB value.
+  # v2: the original volume was initialized before the magic variables existed, and
+  # PostgreSQL keeps the password set at initdb time for the life of the data
+  # directory, so a fresh volume is required for the generated password to apply.
   flagsmith_pgdata_v2:
