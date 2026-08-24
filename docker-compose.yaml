@@ -1,16 +1,20 @@
 # Self-hosted Flagsmith (Spec 039) — deployed via Coolify dockercompose build pack.
-# Secrets (FLAGSMITH_DB_PASSWORD, FLAGSMITH_DJANGO_SECRET) and FLAGSMITH_DOMAIN /
-# FLAGSMITH_API_URL are injected as Coolify application environment variables, not
-# stored in this file. Images use public Docker Hub (flagsmith/*), NOT the gated
+#
+# No host ports are published: Main is a shared host and 8000/8080/8081 collide with
+# other resources. Services are only `expose`d on the internal Compose network, and
+# Coolify's proxy routes traffic using the SERVICE_FQDN_* magic variables below.
+#
+# Secrets are generated and persisted by Coolify from the SERVICE_PASSWORD_* /
+# SERVICE_HEX_64_* magic variables, so they are never stored in this file.
+#
+# Images come from public Docker Hub (flagsmith/*), NOT the gated
 # docker.flagsmith.com registry.
-
 name: flagsmith
-
 services:
   db:
     image: postgres:15.5-alpine
     environment:
-      POSTGRES_PASSWORD: ${FLAGSMITH_DB_PASSWORD}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_FLAGSMITHDB}
       POSTGRES_DB: flagsmith
     volumes:
       - flagsmith_pgdata:/var/lib/postgresql/data
@@ -20,33 +24,34 @@ services:
       timeout: 5s
       retries: 20
       start_period: 20s
-
   api:
     image: flagsmith/flagsmith-api:latest
     command: ["migrate-and-serve"]
     environment:
-      DATABASE_URL: postgresql://postgres:${FLAGSMITH_DB_PASSWORD}@db:5432/flagsmith
+      # Coolify generates this FQDN and proxies it to the api container on port 8000.
+      SERVICE_FQDN_API_8000: ""
+      DATABASE_URL: postgresql://postgres:${SERVICE_PASSWORD_FLAGSMITHDB}@db:5432/flagsmith
       ENV: production
       DJANGO_ALLOWED_HOSTS: "*"
-      DJANGO_SECRET_KEY: ${FLAGSMITH_DJANGO_SECRET}
-      FLAGSMITH_DOMAIN: ${FLAGSMITH_DOMAIN:-localhost:8000}
+      DJANGO_SECRET_KEY: ${SERVICE_HEX_64_FLAGSMITHDJANGO}
+      FLAGSMITH_DOMAIN: ${SERVICE_FQDN_API_8000}
       USE_POSTGRES_FOR_ANALYTICS: "true"
       TASK_RUN_METHOD: SYNCHRONOUSLY
       PROMETHEUS_ENABLED: "false"
-    ports:
-      - 8000:8000
+    expose:
+      - "8000"
     depends_on:
       db:
         condition: service_healthy
-
   frontend:
     image: flagsmith/flagsmith-frontend:latest
     environment:
-      FLAGSMITH_API_URL: ${FLAGSMITH_API_URL:-http://api:8000/api/v1/}
-    ports:
-      - 8081:8080
+      # Coolify generates this FQDN and proxies it to the frontend container on port 8080.
+      SERVICE_FQDN_FRONTEND_8080: ""
+      FLAGSMITH_API_URL: ${SERVICE_URL_API_8000}/api/v1/
+    expose:
+      - "8080"
     depends_on:
       - api
-
 volumes:
   flagsmith_pgdata:
