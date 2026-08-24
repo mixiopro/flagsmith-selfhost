@@ -17,7 +17,7 @@ services:
       POSTGRES_PASSWORD: ${SERVICE_PASSWORD_FLAGSMITHDB}
       POSTGRES_DB: flagsmith
     volumes:
-      - flagsmith_pgdata:/var/lib/postgresql/data
+      - flagsmith_pgdata_v2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -d flagsmith -U postgres"]
       interval: 5s
@@ -54,4 +54,7 @@ services:
     depends_on:
       - api
 volumes:
-  flagsmith_pgdata:
+  # v2: the original volume was initialized with a pre-magic-variable password, which
+  # PostgreSQL keeps for the life of the data directory. A fresh volume lets initdb use
+  # the Coolify-generated SERVICE_PASSWORD_FLAGSMITHDB value.
+  flagsmith_pgdata_v2:
