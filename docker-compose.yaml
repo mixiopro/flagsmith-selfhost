@@ -35,6 +35,13 @@ services:
     command: ["migrate-and-serve"]
     environment:
       - FLAGSMITH_DOMAIN=api.flagsmith.mixio.pro
+      # Public URLs used to build OAuth 2.1 metadata (CLI/MCP login) and email links.
+      # FLAGSMITH_API_URL must be the root, because the API serves
+      # /.well-known/oauth-authorization-server there and the CLI requires the
+      # advertised issuer to equal the URL it was given. FLAGSMITH_FRONTEND_URL
+      # otherwise defaults to http://localhost:8080 and breaks the authorize step.
+      - FLAGSMITH_API_URL=https://api.flagsmith.mixio.pro
+      - FLAGSMITH_FRONTEND_URL=https://flagsmith.mixio.pro
       - DATABASE_URL=postgresql://postgres:${SERVICE_PASSWORD_FLAGSMITHDB}@db:5432/flagsmith
       - ENV=production
       - DJANGO_ALLOWED_HOSTS=*
