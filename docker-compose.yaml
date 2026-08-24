@@ -1,12 +1,16 @@
 # Self-hosted Flagsmith (Spec 039) — deployed via Coolify dockercompose build pack.
 #
-# No host ports are published: Main is a shared host where 8000/8080/8081 are already
-# allocated by other resources. Services are only `expose`d on the internal Compose
-# network and Coolify's proxy routes them using the SERVICE_FQDN_* magic variables.
-# Each FQDN variable is declared bare AND referenced, because Coolify only generates a
-# value (and therefore a proxy route) for magic variables that are actually used.
+# Routing: no host ports are published. Main is a shared host where 8000/8080/8081 are
+# already allocated, so each service is only `expose`d on the internal Compose network
+# and Coolify's Traefik proxy routes the public hostnames below to the container ports.
+# The domains are set with explicit Traefik labels rather than SERVICE_FQDN_* magic
+# variables, because editing a generated FQDN variable does not regenerate the proxy
+# route and the CLI cannot set docker_compose_domains.
 #
-# Secrets are generated and persisted by Coolify from the SERVICE_PASSWORD_* /
+#   https://flagsmith.mixio.pro      -> frontend:8080  (UI)
+#   https://api.flagsmith.mixio.pro  -> api:8000       (SDK / server-side API)
+#
+# Secrets are still generated and persisted by Coolify from the SERVICE_PASSWORD_* /
 # SERVICE_HEX_64_* magic variables, so they are never stored in this file.
 #
 # Images come from public Docker Hub (flagsmith/*), NOT the gated
@@ -30,9 +34,7 @@ services:
     image: flagsmith/flagsmith-api:latest
     command: ["migrate-and-serve"]
     environment:
-      # Coolify proxies this generated FQDN to the api container on port 8000.
-      - SERVICE_FQDN_API_8000
-      - FLAGSMITH_DOMAIN=${SERVICE_FQDN_API_8000}
+      - FLAGSMITH_DOMAIN=api.flagsmith.mixio.pro
       - DATABASE_URL=postgresql://postgres:${SERVICE_PASSWORD_FLAGSMITHDB}@db:5432/flagsmith
       - ENV=production
       - DJANGO_ALLOWED_HOSTS=*
@@ -42,18 +44,37 @@ services:
       - PROMETHEUS_ENABLED=false
     expose:
       - "8000"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.flagsmithapi-http.rule=Host(`api.flagsmith.mixio.pro`)
+      - traefik.http.routers.flagsmithapi-http.entryPoints=http
+      - traefik.http.routers.flagsmithapi-http.middlewares=redirect-to-https
+      - traefik.http.routers.flagsmithapi-https.rule=Host(`api.flagsmith.mixio.pro`)
+      - traefik.http.routers.flagsmithapi-https.entryPoints=https
+      - traefik.http.routers.flagsmithapi-https.tls=true
+      - traefik.http.routers.flagsmithapi-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.flagsmithapi-https.service=flagsmithapi-svc
+      - traefik.http.services.flagsmithapi-svc.loadbalancer.server.port=8000
     depends_on:
       db:
         condition: service_healthy
   frontend:
     image: flagsmith/flagsmith-frontend:latest
     environment:
-      # Coolify proxies this generated FQDN to the frontend container on port 8080.
-      - SERVICE_FQDN_FRONTEND_8080
-      - FLAGSMITH_UI_DOMAIN=${SERVICE_FQDN_FRONTEND_8080}
-      - FLAGSMITH_API_URL=${SERVICE_URL_API_8000}/api/v1/
+      - FLAGSMITH_API_URL=https://api.flagsmith.mixio.pro/api/v1/
     expose:
       - "8080"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.flagsmithui-http.rule=Host(`flagsmith.mixio.pro`)
+      - traefik.http.routers.flagsmithui-http.entryPoints=http
+      - traefik.http.routers.flagsmithui-http.middlewares=redirect-to-https
+      - traefik.http.routers.flagsmithui-https.rule=Host(`flagsmith.mixio.pro`)
+      - traefik.http.routers.flagsmithui-https.entryPoints=https
+      - traefik.http.routers.flagsmithui-https.tls=true
+      - traefik.http.routers.flagsmithui-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.flagsmithui-https.service=flagsmithui-svc
+      - traefik.http.services.flagsmithui-svc.loadbalancer.server.port=8080
     depends_on:
       - api
 volumes:
